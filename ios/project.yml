@@ -1,0 +1,53 @@
+# XcodeGen-Projektbeschreibung. Projekt erzeugen mit:  cd ios && xcodegen generate
+name: FahrradInventur
+options:
+  bundleIdPrefix: de.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  FahrradInventur:
+    type: application
+    platform: iOS
+    sources:
+      - path: FahrradInventur
+        excludes:
+          - "Info.plist"
+      # Die Web-App wird als Ordner "web" ins App-Bundle kopiert (immer der aktuelle Stand aus ../web).
+      - path: ../web
+        type: folder
+        buildPhase: resources
+    info:
+      path: FahrradInventur/Info.plist
+      properties:
+        CFBundleDisplayName: Fahrrad-Inventur
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: Die Kamera wird benötigt, um Fahrräder und Teile für die Inventur zu fotografieren.
+        NSPhotoLibraryUsageDescription: Fotos aus der Mediathek können Fahrrädern und Teilen zugeordnet werden.
+        NSPhotoLibraryAddUsageDescription: Exportierte Bilder können in der Mediathek gesichert werden.
+        ITSAppUsesNonExemptEncryption: false
+        # Leer = eingebaute Web-App (offline). Alternativ URL der gehosteten PWA, z. B. https://example.github.io/fahrrad-inventur/
+        WebAppURL: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.example.fahrradinventur
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO

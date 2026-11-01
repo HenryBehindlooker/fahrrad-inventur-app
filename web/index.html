@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fahrrad-Inventur</title>
+  <meta name="description" content="Inventur alter Fahrräder mit Foto-Erkennung, Teilelisten und Teile-Lager">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181b" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Inventur">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="topbar" class="no-print">
+    <button id="topbar-back" class="topbar-btn" type="button" hidden aria-label="Zurück">‹</button>
+    <h1 id="topbar-title">Fahrrad-Inventur</h1>
+    <div id="topbar-actions"></div>
+  </header>
+
+  <main id="view" tabindex="-1"><div class="empty"><div class="spinner"></div></div></main>
+
+  <nav id="tabbar" class="no-print" aria-label="Hauptnavigation">
+    <a href="#/" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z"/></svg><span>Übersicht</span></a>
+    <a href="#/raeder" data-tab="bikes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16 9 8h6l3.5 8M9 8l3 8M15 8l-1.5-3H11"/></svg><span>Räder</span></a>
+    <a href="#/rad/neu" data-tab="new" class="tab-cta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Erfassen</span></a>
+    <a href="#/teile" data-tab="parts"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Teile</span></a>
+    <a href="#/einstellungen" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Mehr</span></a>
+  </nav>
+
+  <div id="toasts" aria-live="polite"></div>
+  <noscript>Diese App benötigt JavaScript.</noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
