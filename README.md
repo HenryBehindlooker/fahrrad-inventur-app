@@ -17,7 +17,15 @@ Web-App (PWA) für die Inventur alter Fahrräder verschiedenster Hersteller und 
 npm run serve          # http://localhost:8080
 ```
 
-Es gibt keinen Build-Schritt: `web/` ist die fertige App. Für das iPhone die App per HTTPS hosten (z. B. GitHub Pages mit dem Ordner `web/`), in Safari öffnen und **Teilen → Zum Home-Bildschirm** wählen.
+Es gibt keinen Build-Schritt: `web/` ist die fertige App.
+
+## Online über GitHub Pages
+
+Der Workflow `.github/workflows/pages.yml` veröffentlicht `web/` bei jedem Push auf `main` unter
+**https://henrybehindlooker.github.io/fahrrad-inventur-app/**.
+Einmalig unter **Settings → Pages → Build and deployment → Source** die Option **GitHub Actions** wählen.
+
+Auf dem iPhone die Adresse in Safari öffnen und **Teilen → Zum Home-Bildschirm** wählen.
 
 Danach unter **Mehr → Einstellungen** den Claude-API-Key eintragen (oder eine Proxy-URL, siehe unten) und **Verbindung testen** antippen.
 
