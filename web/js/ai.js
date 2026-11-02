@@ -221,3 +221,40 @@ export async function testConnection(settings) {
     throw translateError(e);
   }
 }
+
+const SALE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['price_private_low', 'price_private_high', 'price_dealer', 'price_parts_out', 'recommendation', 'reasoning',
+    'title', 'text', 'highlights', 'defects', 'keywords'],
+  properties: {
+    price_private_low: { type: 'number', description: 'Untere Grenze realistischer Privatverkaufspreis in EUR' },
+    price_private_high: { type: 'number', description: 'Obere Grenze realistischer Privatverkaufspreis in EUR' },
+    price_dealer: { type: 'number', description: 'Realistischer Händler-Ankaufspreis in EUR' },
+    price_parts_out: { type: 'number', description: 'Geschätzter Erlös bei Einzelverkauf der Teile (Ausschlachten) in EUR' },
+    recommendation: { type: 'string', enum: ['komplett verkaufen', 'erst aufbereiten', 'ausschlachten', 'sammlerstück – Spezialmarkt'] },
+    reasoning: { type: 'string', description: 'Kurze Begründung der Preise und Empfehlung (2–4 Sätze)' },
+    title: { type: 'string', description: 'Anzeigentitel, max. 65 Zeichen' },
+    text: { type: 'string', description: 'Anzeigentext für Kleinanzeigen/eBay, ehrlich, mit Absätzen, ohne Preisangabe' },
+    highlights: { type: 'array', items: { type: 'string' } },
+    defects: { type: 'array', items: { type: 'string' } },
+    keywords: { type: 'array', items: { type: 'string' }, description: 'Suchbegriffe für die Anzeige' },
+  },
+};
+
+/** Verkaufsbewertung + Anzeigentext auf Basis der Inventurdaten (und optional Fotos). */
+export async function sellAssistant(settings, bike, parts, images = []) {
+  const facts = {
+    hersteller: bike.manufacturer, modell: bike.model, typ: bike.type, baujahr: bike.year, rahmengroesse: bike.frameSize,
+    laufrad: bike.wheelSize, farbe: bike.color, material: bike.frameMaterial, zustand_1_bis_5: bike.condition, notizen: bike.notes,
+    erledigte_arbeiten: (bike.tasks || []).filter((t) => t.done).map((t) => t.text),
+    offene_maengel: (bike.tasks || []).filter((t) => !t.done).map((t) => t.text),
+    teile: parts.map((p) => ({ kategorie: p.category, hersteller: p.manufacturer, modell: p.model, beschreibung: p.description, zustand: p.condition })),
+  };
+  const { data, model } = await call(settings, {
+    images: images.slice(0, Math.min(3, settings.maxPhotos || 6)),
+    text: `Erstelle eine Verkaufsbewertung für den deutschen Gebrauchtmarkt (Kleinanzeigen, eBay, Händler) und einen verkaufsfertigen Anzeigentext für dieses Fahrrad. Sei realistisch und ehrlich, nenne Mängel. Inventurdaten:\n${JSON.stringify(facts, null, 1)}`,
+    schema: SALE_SCHEMA,
+  });
+  return { ...data, model, at: new Date().toISOString() };
+}

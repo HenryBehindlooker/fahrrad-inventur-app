@@ -6,19 +6,24 @@ import {
 import { recognizePart, partFromAi } from '../ai.js';
 import { processImage } from '../images.js';
 import {
-  html, raw, setView, $, options, toast, busy, pickImages, formData, confirm,
+  html, raw, setView, boundView, $, options, toast, busy, pickImages, formData, confirm,
 } from '../ui.js';
 import { categorySelect } from './bikeForm.js';
+import { timeline } from './history.js';
 import { navigate } from '../app.js';
 
 export async function partFormView(id, query = {}) {
+  const setView = boundView();
   const isNew = !id;
   const part = isNew
     ? { bikeId: query.rad || null, status: 'lager', quantity: 1, category: 'sonstiges/sonstiges', photoIds: [] }
     : await db.getPart(id);
   if (!part) { toast('Teil nicht gefunden', 'error'); navigate('/teile', { replace: true }); return; }
 
-  const [bikes, allParts, photos, settings] = await Promise.all([db.listBikes(), db.listParts(), db.getPhotos(part.photoIds), db.getSettings()]);
+  const [bikes, allParts, photos, settings, events] = await Promise.all([
+    db.listBikes(), db.listParts(), db.getPhotos(part.photoIds), db.getSettings(), isNew ? [] : db.eventsOf('part', id),
+  ]);
+  const locations = [...new Set(allParts.map((p) => p.location).concat(bikes.map((b) => b.location)).filter(Boolean))].sort();
   const bikeOptions = bikes
     .filter((b) => b.status !== 'ausgeschlachtet' || b.id === part.bikeId)
     .sort((a, b) => a.invNr.localeCompare(b.invNr))
@@ -63,10 +68,14 @@ export async function partFormView(id, query = {}) {
         <div class="form-grid">
           <label class="span-2">Verbaut an<select name="bikeId" id="sel-bike">${options(bikeOptions, part.bikeId, { empty: '— nicht verbaut (Einzelteil) —' })}</select></label>
           <label class="loose-only">Status<select name="status">${options(PART_STATUS, part.status === 'verbaut' ? 'lager' : part.status)}</select></label>
-          <label class="loose-only">Lagerort<input name="location" value="${part.location || ''}" placeholder="z. B. Kiste 4"></label>
+          <label class="loose-only">Lagerort<input name="location" list="dl-loc" value="${part.location || ''}" placeholder="z. B. Kiste 4"></label>
         </div>
         <label>Notizen<textarea name="notes" rows="3">${part.notes || ''}</textarea></label>
       </section>
+
+      ${isNew ? '' : html`<section class="card"><div class="section-head"><h2>Verlauf</h2>
+        <a class="btn btn-small" href="#/druck/etiketten?teile=${part.id}">Etikett drucken</a></div>${timeline(events)}</section>`}
+      <datalist id="dl-loc">${locations.map((l) => html`<option value="${l}">`)}</datalist>
 
       <div class="sticky-actions">
         ${isNew ? '' : html`<button type="button" class="btn btn-danger" id="btn-delete">Löschen</button>`}

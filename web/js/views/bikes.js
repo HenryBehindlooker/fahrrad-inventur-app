@@ -2,7 +2,7 @@ import * as db from '../db.js';
 import {
   BIKE_STATUS, BIKE_TYPES, statusName, bikeTitle, matchesQuery, formatEuro,
 } from '../model.js';
-import { html, setView, $, options, thumb, conditionBadge } from '../ui.js';
+import { html, setView, boundView, $, options, thumb, conditionBadge } from '../ui.js';
 import { navigate } from '../app.js';
 
 const SORTS = [
@@ -13,6 +13,7 @@ const SORTS = [
 ];
 
 export async function bikesView(_, query) {
+  const setView = boundView();
   const [bikes, parts] = await Promise.all([db.listBikes(), db.listParts()]);
   const covers = new Map((await db.getPhotos(bikes.map((b) => b.photoIds?.[0]).filter(Boolean))).map((p) => [p.id, p.thumb]));
   const partCount = new Map();
@@ -21,10 +22,12 @@ export async function bikesView(_, query) {
   const q = query.q || '';
   const status = query.status || '';
   const typ = query.typ || '';
+  const ort = query.ort || '';
+  const locations = [...new Set(bikes.map((b) => b.location).filter(Boolean))].sort();
   const sort = query.sort || 'neu';
 
   let list = bikes.filter((b) => matchesQuery(b, q, ['invNr', 'manufacturer', 'model', 'type', 'color', 'frameNumber', 'year', 'notes', 'location'])
-    && (!status || b.status === status) && (!typ || b.type === typ));
+    && (!status || b.status === status) && (!typ || b.type === typ) && (!ort || b.location === ort));
   const sorters = {
     neu: (a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''),
     nr: (a, b) => a.invNr.localeCompare(b.invNr),
@@ -32,7 +35,7 @@ export async function bikesView(_, query) {
     wert: (a, b) => (b.estimatedValue || 0) - (a.estimatedValue || 0),
   };
   list = list.sort(sorters[sort] || sorters.neu);
-  const filterQs = new URLSearchParams(Object.entries({ q, status, typ }).filter(([, v]) => v)).toString();
+  const filterQs = new URLSearchParams(Object.entries({ q, status, typ, ort }).filter(([, v]) => v)).toString();
 
   setView(html`
     <form class="filters" id="filters">
@@ -40,6 +43,7 @@ export async function bikesView(_, query) {
       <div class="filter-row">
         <select name="status" aria-label="Status">${options(BIKE_STATUS, status, { empty: 'Alle Status' })}</select>
         <select name="typ" aria-label="Typ">${options(BIKE_TYPES, typ, { empty: 'Alle Typen' })}</select>
+        ${locations.length ? html`<select name="ort" aria-label="Lagerort">${options(locations, ort, { empty: 'Alle Lagerorte' })}</select>` : ''}
         <select name="sort" aria-label="Sortierung">${options(SORTS, sort)}</select>
       </div>
     </form>
@@ -58,7 +62,9 @@ export async function bikesView(_, query) {
             <span class="status status-${b.status}">${statusName(BIKE_STATUS, b.status)}</span></div>
           <strong class="bike-card-title">${bikeTitle(b)}</strong>
           <span class="muted small">${[b.type, b.year, b.frameSize, b.color].filter(Boolean).join(' · ')}</span>
-          <div class="bike-card-meta">${conditionBadge(b.condition)}
+          <div class="bike-card-meta">${b.review ? html`<span class="badge conf-mittel">${b.review === 'ready' ? 'zu prüfen' : b.review === 'error' ? 'KI-Fehler' : 'KI läuft'}</span>` : ''}
+            ${(b.tasks || []).some((t) => !t.done) ? html`<span class="badge badge-soft">🔧 ${(b.tasks || []).filter((t) => !t.done).length}</span>` : ''}
+            ${conditionBadge(b.condition)}
             <span class="badge badge-soft">${partCount.get(b.id) || 0} Teile</span>
             ${b.estimatedValue ? html`<span class="badge badge-soft">${formatEuro(b.estimatedValue)}</span>` : ''}</div>
         </div>

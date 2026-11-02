@@ -1,7 +1,7 @@
 // CSV-Export und JSON-Komplettsicherung (inkl. Fotos).
 import * as db from './db.js';
 import {
-  toCSV, categoryInfo, statusName, BIKE_STATUS, PART_STATUS, bikeTitle,
+  toCSV, categoryInfo, statusName, BIKE_STATUS, PART_STATUS, bikeTitle, bikeCalc,
 } from './model.js';
 import { blobToBase64, base64ToBlob } from './images.js';
 import { saveFile } from './native.js';
@@ -11,6 +11,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export async function exportBikesCSV() {
   const bikes = (await db.listBikes()).sort((a, b) => a.invNr.localeCompare(b.invNr));
   const parts = await db.listParts();
+  const { laborRate } = await db.getSettings();
   const countByBike = new Map();
   for (const p of parts) if (p.bikeId) countByBike.set(p.bikeId, (countByBike.get(p.bikeId) || 0) + 1);
   const csv = toCSV(bikes, [
@@ -27,9 +28,18 @@ export async function exportBikesCSV() {
     { label: 'Zustand (1-5)', get: (b) => b.condition },
     { label: 'Status', get: (b) => statusName(BIKE_STATUS, b.status) },
     { label: 'Lagerort', get: (b) => b.location },
+    { label: 'Angekauft am', get: (b) => b.purchaseDate },
+    { label: 'Angekauft von', get: (b) => b.purchasedFrom },
     { label: 'Einkaufspreis', get: (b) => b.purchasePrice },
     { label: 'Schätzwert', get: (b) => b.estimatedValue },
     { label: 'Verkaufspreis', get: (b) => b.salePrice },
+    { label: 'Verkauft am', get: (b) => b.soldDate },
+    { label: 'Käufer', get: (b) => b.soldTo },
+    { label: 'Arbeitszeit (h)', get: (b) => bikeCalc(b, laborRate).hours },
+    { label: 'Kosten gesamt', get: (b) => bikeCalc(b, laborRate).cost },
+    { label: 'Gewinn', get: (b) => bikeCalc(b, laborRate).margin },
+    { label: 'Offene Aufgaben', get: (b) => bikeCalc(b).openTasks },
+    { label: 'Zuletzt gezählt', get: (b) => b.lastSeenAt?.slice(0, 10) },
     { label: 'Anzahl Teile', get: (b) => countByBike.get(b.id) || 0 },
     { label: 'Notizen', get: (b) => b.notes },
     { label: 'Erfasst am', get: (b) => b.createdAt?.slice(0, 10) },
@@ -68,7 +78,7 @@ export async function exportBackup() {
     const { blob, ...rest } = ph;
     photos.push({ ...rest, data: blob ? await blobToBase64(blob) : null });
   }
-  const backup = { app: 'fahrrad-inventur', version: 1, exportedAt: new Date().toISOString(), ...data, photos };
+  const backup = { app: 'fahrrad-inventur', version: 2, exportedAt: new Date().toISOString(), ...data, photos };
   await saveFile(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `fahrrad-inventur-backup-${today()}.json`);
 }
 
@@ -78,6 +88,6 @@ export async function importBackup(file) {
     throw new Error('Diese Datei ist keine Fahrrad-Inventur-Sicherung.');
   }
   const photos = (backup.photos || []).map(({ data, ...rest }) => ({ ...rest, blob: data ? base64ToBlob(data) : null }));
-  await db.importAll({ bikes: backup.bikes, parts: backup.parts, photos, counters: backup.counters || { bike: 0, part: 0 } });
+  await db.importAll({ bikes: backup.bikes, parts: backup.parts, photos, events: backup.events || [], counters: backup.counters || { bike: 0, part: 0 } });
   return { bikes: backup.bikes.length, parts: backup.parts.length, photos: photos.length };
 }

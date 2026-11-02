@@ -4,9 +4,10 @@ import {
   exportBikesCSV, exportPartsCSV, exportBackup, importBackup,
 } from '../exporter.js';
 import {
-  html, setView, $, options, toast, busy, formData, confirm, pickFile,
+  html, setView, boundView, $, options, toast, busy, formData, confirm, pickFile,
 } from '../ui.js';
 import { isNativeApp } from '../native.js';
+import { parseNumber } from '../model.js';
 import { navigate } from '../app.js';
 
 const EFFORTS = [
@@ -24,6 +25,7 @@ async function storageInfo() {
 }
 
 export async function settingsView() {
+  const setView = boundView();
   const s = await db.getSettings();
   const [bikes, parts] = await Promise.all([db.listBikes(), db.listParts()]);
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -40,6 +42,7 @@ export async function settingsView() {
         <label>Modell<select name="model">${options(MODELS, s.model)}</select></label>
         <label>Gründlichkeit<select name="effort">${options(EFFORTS, s.effort)}</select></label>
         <label>Max. Fotos pro Erkennung<input name="maxPhotos" type="number" min="1" max="10" value="${s.maxPhotos}"></label>
+        <label>Stundensatz Werkstatt €<input name="laborRate" inputmode="decimal" value="${s.laborRate}"></label>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" type="submit">Speichern</button>
@@ -54,7 +57,8 @@ export async function settingsView() {
         <button class="btn" id="btn-csv-bikes">Räderliste als CSV (Excel)</button>
         <button class="btn" id="btn-csv-parts">Teileliste als CSV (Excel)</button>
         <a class="btn" href="#/druck/liste">Inventurliste drucken / PDF</a>
-        <a class="btn" href="#/druck/etiketten">Alle Etiketten drucken</a>
+        <a class="btn" href="#/druck/etiketten">Etiketten aller Räder drucken</a>
+        <a class="btn" href="#/druck/etiketten?teile=">Etiketten aller Lagerteile drucken</a>
         <button class="btn" id="btn-backup">Komplett-Sicherung (JSON inkl. Fotos)</button>
         <button class="btn" id="btn-restore">Sicherung wiederherstellen …</button>
       </div>
@@ -81,7 +85,7 @@ export async function settingsView() {
   const form = $('#settings-form');
   const read = () => {
     const f = formData(form);
-    return { ...s, apiKey: f.apiKey, proxyUrl: f.proxyUrl, model: f.model, effort: f.effort, maxPhotos: Math.min(10, Math.max(1, parseInt(f.maxPhotos, 10) || 6)) };
+    return { ...s, apiKey: f.apiKey, proxyUrl: f.proxyUrl, model: f.model, effort: f.effort, maxPhotos: Math.min(10, Math.max(1, parseInt(f.maxPhotos, 10) || 6)), laborRate: parseNumber(f.laborRate) ?? 0 };
   };
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

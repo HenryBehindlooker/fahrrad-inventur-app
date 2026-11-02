@@ -24,6 +24,33 @@ function render(v) {
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+let viewSeq = 0;
+/**
+ * Gibt eine an den aktuellen Ansichtsaufruf gebundene setView-Funktion zurück.
+ * Rendert nur, wenn seitdem keine neuere Ansicht gestartet wurde und die Adresse gleich geblieben ist –
+ * so überschreibt ein langsames Neuladen nie die Seite, zu der man inzwischen gewechselt hat.
+ */
+export function boundView() {
+  const token = ++viewSeq;
+  const hash = location.hash;
+  return (content, opts) => {
+    if (token !== viewSeq || location.hash !== hash) throw new StaleView();
+    setView(content, opts);
+  };
+}
+
+/** Neuladen nur, solange man noch auf derselben Seite ist (Adresse beim Erzeugen gemerkt). */
+export function reloader(fn) {
+  const hash = location.hash;
+  return (...args) => (location.hash === hash ? fn(...args) : Promise.resolve());
+}
+
+/** Wird geworfen, wenn eine veraltete Ansicht verworfen wird (bricht deren restlichen Ablauf still ab). */
+export class StaleView extends Error {
+  constructor() { super('Veraltete Ansicht verworfen'); this.name = 'StaleView'; }
+}
+window.addEventListener('unhandledrejection', (e) => { if (e.reason instanceof StaleView) e.preventDefault(); });
+
 export function setView(content, { title = '', back = null, actions = '' } = {}) {
   document.title = title ? `${title} – Fahrrad-Inventur` : 'Fahrrad-Inventur';
   $('#topbar-title').textContent = title || 'Fahrrad-Inventur';
@@ -40,7 +67,9 @@ export function toast(msg, type = 'info', ms = 3200) {
   el.className = `toast toast-${type}`;
   el.setAttribute('role', type === 'error' ? 'alert' : 'status');
   el.textContent = msg;
-  $('#toasts').appendChild(el);
+  const box = $('#toasts');
+  box.appendChild(el);
+  while (box.children.length > 3) box.firstElementChild.remove();
   setTimeout(() => el.classList.add('out'), ms);
   setTimeout(() => el.remove(), ms + 400);
 }

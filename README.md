@@ -9,7 +9,13 @@ Web-App (PWA) für die Inventur alter Fahrräder verschiedenster Hersteller und 
 - **Teile-Lager / Ausschlachten**: Teile einzeln abbauen oder ein ganzes Rad ausschlachten (alle Teile gehen ins Lager, die Herkunft wird gemerkt), an andere Räder einbauen oder einzeln erfassen (auch per KI-Foto).
 - **Felder pro Rad**: Hersteller, Modell, Typ, Baujahr, Rahmengröße, Laufradgröße, Farbe, Material, Rahmennummer, Zustand 1–5, Status (Lager / in Arbeit / verkaufsbereit / reserviert / verkauft / ausgeschlachtet), Lagerort, Einkaufspreis, Schätzwert, Verkaufspreis, Notizen.
 - **Export & Auswertung**: CSV für Excel (Räder und Teile), JSON-Komplettsicherung inklusive Fotos (Backup/Restore, Gerätewechsel), Datenblatt pro Rad, Inventurliste und Etiketten (drucken / PDF), Statistik-Übersicht.
-- **Lokal & offline**: Alle Daten liegen in IndexedDB auf dem Gerät. Nur die KI-Erkennung braucht Internet.
+- **QR-Scanner & Inventur-Modus**: Etiketten für Räder und Lagerteile drucken. Ein Scan in der App oder mit der iPhone-Kamera öffnet den Eintrag. Bei der Bestandszählung zeigt die App live, was gefunden ist und was fehlt.
+- **Schnellerfassung**: viele Räder hintereinander fotografieren, die KI erkennt im Hintergrund, danach gesammelt prüfen.
+- **Werkstatt & Kalkulation**: Aufgaben pro Rad mit Arbeitszeit und Teilekosten, Gewinnrechnung (Einkauf + Teile + Arbeit gegenüber Erlös), passende Teile aus dem Lager einbauen.
+- **KI-Verkaufsassistent**: Preisspanne privat, Händler-Ankauf, Erlös bei Einzelteilen, Empfehlung und fertiger Anzeigentext.
+- **Verlauf**: jede Änderung an Rad und Teil wird protokolliert (ab- und eingebaut, Status, Preise, Prüfungen).
+- **Ankauf, Verkauf & Rahmennummer**: Ankaufbeleg-Daten, Käufer, Standzeit, Warnung bei doppelter Rahmennummer, Diebstahl-Check über Bike Index.
+- - **Lokal & offline**: Alle Daten liegen in IndexedDB auf dem Gerät. Nur die KI-Erkennung braucht Internet.
 
 ## Schnellstart (Browser)
 
@@ -69,6 +75,10 @@ Die JS-Seite der Bridge steht in `web/js/native.js`. Im normalen Browser fällt 
   In der App dann die Worker-URL als **Proxy-URL** und den Zugangscode im Feld **API-Key** eintragen. Optional lassen sich mit `ALLOWED_ORIGINS` und `ALLOWED_MODELS` Herkunft und Modelle einschränken.
 
 Modell: Standard ist **Claude Opus 5.5** (beste Erkennung). In den Einstellungen sind Sonnet 5.5 und Haiku 5.5 als günstigere Alternativen wählbar, außerdem Gründlichkeit und maximale Fotozahl pro Erkennung (Standard 6). Die Fotos werden vor dem Senden auf höchstens 1568 px verkleinert. Die Antwort kommt als JSON nach festem Schema (Structured Outputs). Lehnt ein Sicherheitsfilter eine Anfrage ab, versucht die API automatisch ein passendes Ersatzmodell (`fallbacks: "default"`).
+
+## Marktvergleich
+
+In [docs/VERGLEICH.md](docs/VERGLEICH.md) steht, welche ähnlichen Apps es gibt (Sortly, ProBikeGarage, Werkstatt-Software, KI-Identifier, Bicycle Blue Book, Bike Index …) und welche Ideen daraus übernommen wurden.
 
 ## Projektstruktur
 

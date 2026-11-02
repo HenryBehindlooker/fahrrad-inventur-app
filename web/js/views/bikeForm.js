@@ -1,12 +1,12 @@
 // Rad erfassen (Fotos -> KI-Erkennung -> Prüfen -> Speichern) und Rad bearbeiten.
 import * as db from '../db.js';
 import {
-  BIKE_TYPES, BIKE_STATUS, CONDITIONS, FRAME_MATERIALS, CATEGORY_TREE, parseNumber, bikeTitle, partGroupKey,
+  BIKE_TYPES, BIKE_STATUS, CONDITIONS, FRAME_MATERIALS, CATEGORY_TREE, parseNumber, bikeTitle, partGroupKey, normalize,
 } from '../model.js';
 import { recognizeBike, bikeFromAi, partFromAi } from '../ai.js';
 import { processImage } from '../images.js';
 import {
-  html, raw, setView, $, $$, options, toast, busy, pickImages, formData,
+  html, raw, setView, boundView, $, $$, options, toast, busy, pickImages, formData, confirm,
 } from '../ui.js';
 import { navigate } from '../app.js';
 
@@ -26,6 +26,7 @@ export function categorySelect(name, selected) {
 }
 
 export async function bikeFormView(id, query = {}) {
+  const setView = boundView();
   const isNew = !id;
   const bike = isNew ? { status: 'lager', photoIds: [] } : await db.getBike(id);
   if (!bike) { toast('Fahrrad nicht gefunden', 'error'); navigate('/raeder'); return; }
@@ -33,6 +34,8 @@ export async function bikeFormView(id, query = {}) {
   const existingPhotos = isNew ? [] : await db.getPhotos(bike.photoIds);
   const existingParts = isNew ? [] : await db.partsOfBike(id);
   const allBikes = await db.listBikes();
+  const locations = [...new Set((await db.listParts()).map((p) => p.location).concat(allBikes.map((b) => b.location)).filter(Boolean))].sort();
+  const reviewing = !isNew && !!bike.review;
   const manufacturers = [...new Set([...allBikes.map((b) => b.manufacturer).filter(Boolean), ...KNOWN_MANUFACTURERS])].sort((a, b) => a.localeCompare(b, 'de'));
 
   const state = {
@@ -48,9 +51,11 @@ export async function bikeFormView(id, query = {}) {
 
   setView(html`
     <section class="card" id="photo-card">
-      <h2>Fotos</h2>
-      <p class="muted small">Am besten: 1× ganzes Rad seitlich, dazu Details wie Steuerkopf-Schild, Schaltwerk, Kurbel,
-        Bremsen und Rahmennummer (meist unter dem Tretlager).</p>
+      <div class="section-head"><h2>Fotos</h2>${isNew ? html`<a class="btn btn-small btn-ghost" href="#/schnell">⚡ Schnellerfassung</a>` : ''}</div>
+      <details class="tips"${isNew ? raw(' open') : ''}><summary>Welche Fotos helfen der Erkennung?</summary>
+        <ol class="shot-list"><li>Ganzes Rad seitlich (Antriebsseite), gut ausgeleuchtet</li><li>Steuerkopf-Schild / Logo / Dekor</li>
+          <li>Schaltwerk, Umwerfer und Kurbel (Schriftzüge lesbar)</li><li>Bremsen und Naben</li>
+          <li>Rahmennummer (meist unter dem Tretlager) – nah und scharf</li></ol></details>
       <div class="photo-grid" id="photo-grid"></div>
       <div class="btn-row">
         <button type="button" class="btn" id="btn-camera">📷 Foto aufnehmen</button>
@@ -61,7 +66,10 @@ export async function bikeFormView(id, query = {}) {
         ${state.stage === 'photos' ? html`<button type="button" class="btn btn-ghost" id="btn-manual">Ohne KI weiter</button>` : ''}
       </div>
       ${aiReady ? '' : html`<p class="hint">Für die automatische Erkennung bitte unter <a href="#/einstellungen">Einstellungen</a> einen API-Key oder Proxy eintragen.</p>`}
-      <div id="ai-info"></div>
+      <div id="ai-info">${reviewing && bike.ai ? html`<div class="ai-box conf-${bike.ai.confidence}">
+        <strong>Bitte KI-Ergebnis prüfen</strong> <span class="badge">Sicherheit: ${bike.ai.confidence || '?'}</span>
+        <p class="muted small">${existingParts.length} Teile erkannt (in der Rad-Ansicht bearbeitbar) · ${bike.ai.model}. Mit „Prüfung bestätigen“ unten schließt du die Prüfung ab.</p></div>`
+        : reviewing && bike.review === 'error' ? html`<div class="hint">KI-Erkennung fehlgeschlagen: ${bike.reviewError}. Du kannst sie oben neu starten oder die Daten manuell eintragen.</div>` : ''}</div>
     </section>
 
     <form id="bike-form" class="${state.stage === 'photos' ? 'is-hidden' : ''}" autocomplete="off">
@@ -80,11 +88,15 @@ export async function bikeFormView(id, query = {}) {
           <label>Rahmennummer<input name="frameNumber" value="${bike.frameNumber || ''}"></label>
           <label>Zustand<select name="condition">${options(CONDITIONS.map((c) => ({ id: c.id, name: `${c.id} – ${c.name}` })), bike.condition, { empty: '–' })}</select></label>
           <label>Status<select name="status">${options(BIKE_STATUS, bike.status)}</select></label>
-          <label>Lagerort<input name="location" value="${bike.location || ''}" placeholder="z. B. Halle 2, Regal B"></label>
+          <label>Lagerort<input name="location" list="dl-loc" value="${bike.location || ''}" placeholder="z. B. Halle 2, Regal B"></label>
         </div>
       </section>
       <section class="card">
-        <h2>Wert</h2>
+        <h2>Ankauf &amp; Wert</h2>
+        <div class="form-grid">
+          <label>Angekauft am<input name="purchaseDate" type="date" value="${bike.purchaseDate || (isNew ? new Date().toISOString().slice(0, 10) : '')}"></label>
+          <label>Angekauft von<input name="purchasedFrom" value="${bike.purchasedFrom || ''}" placeholder="Name / Quelle (Ankaufbeleg)"></label>
+        </div>
         <div class="form-grid form-grid-3">
           <label>Einkaufspreis €<input name="purchasePrice" inputmode="decimal" value="${bike.purchasePrice ?? ''}"></label>
           <label>Schätzwert €<input name="estimatedValue" inputmode="decimal" value="${bike.estimatedValue ?? ''}"></label>
@@ -102,8 +114,9 @@ export async function bikeFormView(id, query = {}) {
 
       <div class="sticky-actions">
         <a class="btn" href="${isNew ? '#/raeder' : `#/rad/${id}`}">Abbrechen</a>
-        <button class="btn btn-primary" type="submit">Speichern</button>
+        <button class="btn btn-primary" type="submit">${reviewing ? 'Prüfung bestätigen' : 'Speichern'}</button>
       </div>
+      <datalist id="dl-loc">${locations.map((m) => html`<option value="${m}">`)}</datalist>
       <datalist id="dl-man">${manufacturers.map((m) => html`<option value="${m}">`)}</datalist>
     </form>`, { title: isNew ? 'Neues Fahrrad' : `${bike.invNr} bearbeiten`, back: isNew ? '/raeder' : `/rad/${id}` });
 
@@ -257,10 +270,14 @@ export async function bikeFormView(id, query = {}) {
       manufacturer: f.manufacturer, model: f.model, type: f.type, year: f.year, frameSize: f.frameSize,
       wheelSize: f.wheelSize, color: f.color, frameMaterial: f.frameMaterial, frameNumber: f.frameNumber,
       condition: f.condition ? Number(f.condition) : null, status: f.status || 'lager', location: f.location,
-      purchasePrice: parseNumber(f.purchasePrice), estimatedValue: parseNumber(f.estimatedValue), salePrice: parseNumber(f.salePrice),
+      purchaseDate: f.purchaseDate, purchasedFrom: f.purchasedFrom, purchasePrice: parseNumber(f.purchasePrice), estimatedValue: parseNumber(f.estimatedValue), salePrice: parseNumber(f.salePrice),
       notes: f.notes,
     };
     if (state.aiInfo) data.ai = state.aiInfo;
+    if (reviewing) { data.review = null; data.reviewError = ''; }
+    const fn = normalize(data.frameNumber);
+    const dup = fn && allBikes.find((b) => b.id !== id && normalize(b.frameNumber) === fn);
+    if (dup && !await confirm('Rahmennummer schon vorhanden', `${dup.invNr} ${bikeTitle(dup)} hat dieselbe Rahmennummer. Trotzdem speichern?`, 'Trotzdem speichern', 'primary')) return;
     const newParts = state.proposals.filter((p) => p.include).map(({ include, fromAi, ...p }) => ({
       category: p.category || 'sonstiges/sonstiges', manufacturer: p.manufacturer || '', model: p.model || '',
       ref: p.ref || '', description: p.description || '', condition: p.condition ? Number(p.condition) : null,
@@ -280,7 +297,7 @@ export async function bikeFormView(id, query = {}) {
       } else {
         for (const pid of state.removedPhotoIds) await db.deletePhoto(pid);
         const current = await db.getBike(id);
-        const saved = await db.updateBike({ ...current, ...data }, state.newPhotos);
+        const saved = await db.updateBike({ ...current, ...data }, state.newPhotos, reviewing ? 'KI-Ergebnis geprüft' : '');
         for (const p of newParts) await db.savePart({ ...p, bikeId: id });
         toast('Änderungen gespeichert.', 'success');
         navigate(`/rad/${saved.id}`, { replace: true });

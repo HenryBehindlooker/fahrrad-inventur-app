@@ -14,5 +14,15 @@ await build({
   outfile: 'web/vendor/anthropic.mjs',
 });
 
+await build({
+  entryPoints: ['node_modules/jsqr/dist/jsQR.js'],
+  bundle: true,
+  format: 'esm',
+  platform: 'browser',
+  target: ['safari15'],
+  minify: true,
+  outfile: 'web/vendor/jsqr.mjs',
+});
+
 copyFileSync('node_modules/qrcode-generator/dist/qrcode.mjs', 'web/vendor/qrcode.mjs');
-console.log('vendor: web/vendor/anthropic.mjs, web/vendor/qrcode.mjs');
+console.log('vendor: web/vendor/anthropic.mjs, web/vendor/jsqr.mjs, web/vendor/qrcode.mjs');

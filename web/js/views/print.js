@@ -4,8 +4,13 @@ import * as db from '../db.js';
 import {
   BIKE_STATUS, CATEGORY_TREE, CONDITIONS, statusName, bikeTitle, partTitle, categoryInfo, formatEuro, matchesQuery,
 } from '../model.js';
-import { html, raw, setView, $, fmtDate } from '../ui.js';
+import { html, raw, setView, boundView, $, fmtDate } from '../ui.js';
 import { printPage } from '../native.js';
+
+/** QR-Inhalt: Link auf die App (öffnet das Rad/Teil direkt mit der iPhone-Kamera), sonst Kurzform. */
+export function labelCode(invNr) {
+  return location.protocol.startsWith('http') ? `${location.origin}${location.pathname}#/inv/${invNr}` : `FIR:${invNr}`;
+}
 
 function qrSvg(text) {
   const qr = qrcode(0, 'M');
@@ -23,6 +28,7 @@ function toolbar(back) {
 function bindPrint() { $('#btn-print').addEventListener('click', printPage); }
 
 export async function printBikeView(id) {
+  const setView = boundView();
   const bike = await db.getBike(id);
   if (!bike) { setView(html`<p>Nicht gefunden.</p>`); return; }
   const [parts, photos] = await Promise.all([db.partsOfBike(id), db.getPhotos(bike.photoIds.slice(0, 1))]);
@@ -34,7 +40,7 @@ export async function printBikeView(id) {
       <header class="sheet-head">
         <div><div class="sheet-invnr">${bike.invNr}</div><h1>${bikeTitle(bike)}</h1>
           <p>${[bike.type, bike.year, bike.color].filter(Boolean).join(' · ')}</p></div>
-        <div class="sheet-qr">${qrSvg(`FIR:${bike.invNr}`)}</div>
+        <div class="sheet-qr">${qrSvg(labelCode(bike.invNr))}</div>
       </header>
       <div class="sheet-cols">
         ${photoUrl ? html`<img class="sheet-photo" src="${photoUrl}" alt="">` : ''}
@@ -74,12 +80,13 @@ async function filteredBikes(query) {
     list = bikes.filter((b) => ids.has(b.id));
   } else {
     list = bikes.filter((b) => matchesQuery(b, query.q || '', ['invNr', 'manufacturer', 'model', 'type', 'color', 'frameNumber', 'year', 'notes', 'location'])
-      && (!query.status || b.status === query.status) && (!query.typ || b.type === query.typ));
+      && (!query.status || b.status === query.status) && (!query.typ || b.type === query.typ) && (!query.ort || b.location === query.ort));
   }
   return list.sort((a, b) => a.invNr.localeCompare(b.invNr));
 }
 
 export async function printListView(query) {
+  const setView = boundView();
   const [list, parts] = await Promise.all([filteredBikes(query), db.listParts()]);
   const count = new Map();
   for (const p of parts) if (p.bikeId) count.set(p.bikeId, (count.get(p.bikeId) || 0) + 1);
@@ -101,15 +108,33 @@ export async function printListView(query) {
 }
 
 export async function printLabelsView(query) {
-  const list = await filteredBikes(query);
-  const back = query.ids && !query.ids.includes(',') ? `/rad/${query.ids}` : '/raeder';
+  const setView = boundView();
+  let labels;
+  let back = '/raeder';
+  if (query.teile !== undefined) {
+    const [parts, bikes] = await Promise.all([db.listParts(), db.listBikes()]);
+    const byId = new Map(bikes.map((b) => [b.id, b]));
+    const ids = query.teile ? new Set(query.teile.split(',')) : null;
+    const list = parts
+      .filter((p) => (ids ? ids.has(p.id) : !p.bikeId && ['lager', 'reserviert', 'defekt'].includes(p.status)))
+      .sort((a, b) => a.invNr.localeCompare(b.invNr));
+    labels = list.map((p) => ({
+      invNr: p.invNr, title: partTitle(p),
+      sub: [categoryInfo(p.category).name, p.ref, p.bikeId ? `an ${byId.get(p.bikeId)?.invNr || ''}` : p.location].filter(Boolean).join(' · '),
+    }));
+    back = ids && ids.size === 1 ? `/teil/${[...ids][0]}` : '/teile';
+  } else {
+    const list = await filteredBikes(query);
+    labels = list.map((b) => ({ invNr: b.invNr, title: bikeTitle(b), sub: [b.type, b.year, b.frameSize].filter(Boolean).join(' · ') }));
+    if (query.ids && !query.ids.includes(',')) back = `/rad/${query.ids}`;
+  }
   setView(html`${toolbar(back)}
-    <p class="no-print muted small">${list.length} Etiketten. Format: 3 Spalten auf A4 (z. B. 70 × 37 mm Etikettenbogen).</p>
-    <div class="labels">${list.map((b) => html`
+    <p class="no-print muted small">${labels.length} Etiketten · 3 Spalten auf A4 (z. B. 70 × 37 mm Etikettenbogen).
+      Der QR-Code öffnet den Eintrag direkt – mit dem Scanner in der App oder der iPhone-Kamera.</p>
+    <div class="labels">${labels.map((l) => html`
       <div class="label">
-        <div class="label-qr">${qrSvg(`FIR:${b.invNr}`)}</div>
-        <div class="label-text"><strong>${b.invNr}</strong><span>${bikeTitle(b)}</span>
-          <small>${[b.type, b.year, b.frameSize].filter(Boolean).join(' · ')}</small></div>
+        <div class="label-qr">${qrSvg(labelCode(l.invNr))}</div>
+        <div class="label-text"><strong>${l.invNr}</strong><span>${l.title}</span><small>${l.sub}</small></div>
       </div>`)}</div>`, { title: 'Etiketten', back });
   bindPrint();
 }

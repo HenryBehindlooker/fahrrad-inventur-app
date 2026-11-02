@@ -4,7 +4,7 @@ import {
   CATEGORY_TREE, PART_STATUS, categoryInfo, categoryLabel, statusName, partTitle, bikeTitle, groupParts,
   matchesQuery, formatEuro,
 } from '../model.js';
-import { html, setView, $, conditionBadge, toast } from '../ui.js';
+import { html, setView, boundView, $, conditionBadge, toast } from '../ui.js';
 import { navigate } from '../app.js';
 
 const TABS = [
@@ -34,14 +34,18 @@ export function partRow(p, bikes) {
 }
 
 export async function partsView(query) {
+  const setView = boundView();
   const tab = query.tab || 'lager';
   const q = query.q || '';
   const cat = query.kat || '';
+  const ort = query.ort || '';
   const [parts, bikeList] = await Promise.all([db.listParts(), db.listBikes()]);
   const bikes = new Map(bikeList.map((b) => [b.id, b]));
+  const locations = [...new Set(parts.map((p) => p.location).filter(Boolean))].sort();
 
   const fits = (p) => matchesQuery(p, q, ['invNr', 'manufacturer', 'model', 'ref', 'description', 'location', 'notes'])
-    && (!cat || categoryInfo(p.category).group === cat || p.category === cat);
+    && (!cat || categoryInfo(p.category).group === cat || p.category === cat)
+    && (!ort || p.location === ort);
 
   let body;
   if (tab === 'gruppen') {
@@ -61,7 +65,8 @@ export async function partsView(query) {
       .filter(fits)
       .sort((a, b) => a.category.localeCompare(b.category) || partTitle(a).localeCompare(partTitle(b), 'de'));
     body = list.length
-      ? html`<p class="muted small">${list.length} Teile</p><ul class="list">${list.map((p) => partRow(p, bikes))}</ul>`
+      ? html`<div class="list-head"><span class="muted small">${list.length} Teile</span>
+          ${tab === 'lager' ? html`<a class="btn btn-small" href="#/druck/etiketten?teile=${list.map((p) => p.id).join(',')}">Etiketten drucken</a>` : ''}</div><ul class="list">${list.map((p) => partRow(p, bikes))}</ul>`
       : html`<div class="empty"><p>${tab === 'lager' ? 'Keine Teile im Lager.' : 'Keine Teile gefunden.'}</p>
           <p class="muted small">Teile kommen ins Lager, wenn du sie an einem Rad abbaust, ein Rad ausschlachtest oder sie einzeln erfasst.</p></div>`;
   }
@@ -75,13 +80,15 @@ export async function partsView(query) {
          class="${t.id === tab ? 'active' : ''}" aria-selected="${t.id === tab}">${t.name}</a>`)}</nav>
     <form class="filters" id="filters">
       <input type="search" name="q" value="${q}" placeholder="Suchen: Hersteller, Modell, Teile-Nr. …" aria-label="Suchen">
-      <div class="filter-row"><select name="kat" aria-label="Bereich">${catOptions}</select></div>
+      <div class="filter-row"><select name="kat" aria-label="Bereich">${catOptions}</select>
+        <select name="ort" aria-label="Lagerort"><option value="">Alle Lagerorte</option>${locations.map((l) => html`<option value="${l}">${l}</option>`)}</select></div>
     </form>
     ${body}
     <a class="fab" href="#/teil/neu" aria-label="Einzelteil erfassen">+</a>`, { title: 'Teile' });
 
   // "selected" wird oben als Text eingefügt – Auswahl sicherheitshalber per DOM setzen
   $('#filters').kat.value = cat;
+  $('#filters').ort.value = ort;
 
   const form = $('#filters');
   let t;
@@ -89,6 +96,7 @@ export async function partsView(query) {
     const params = new URLSearchParams({ tab });
     if (form.q.value.trim()) params.set('q', form.q.value.trim());
     if (form.kat.value) params.set('kat', form.kat.value);
+    if (form.ort.value) params.set('ort', form.ort.value);
     navigate(`/teile?${params}`, { replace: true });
   };
   form.addEventListener('change', apply);
@@ -98,6 +106,7 @@ export async function partsView(query) {
 }
 
 export async function partGroupView(key) {
+  const setView = boundView();
   const [parts, bikeList] = await Promise.all([db.listParts(), db.listBikes()]);
   const bikes = new Map(bikeList.map((b) => [b.id, b]));
   const group = groupParts(parts, 1).find((g) => g.key === key);

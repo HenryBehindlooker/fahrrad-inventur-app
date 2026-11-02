@@ -1,10 +1,11 @@
 // Service Worker: App-Shell offline verfügbar machen. KI-Anfragen gehen immer ins Netz.
-const VERSION = 'fi-v1';
+const VERSION = 'fi-v2';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
-  './js/app.js', './js/ui.js', './js/db.js', './js/model.js', './js/ai.js', './js/images.js', './js/native.js', './js/exporter.js',
+  './js/app.js', './js/ui.js', './js/queue.js', './js/scanner.js', './js/db.js', './js/model.js', './js/ai.js', './js/images.js', './js/native.js', './js/exporter.js',
   './js/views/dashboard.js', './js/views/bikes.js', './js/views/bikeForm.js', './js/views/bikeDetail.js',
   './js/views/parts.js', './js/views/partForm.js', './js/views/settings.js', './js/views/print.js',
+  './js/views/history.js', './js/views/scan.js', './js/views/quick.js', './vendor/jsqr.mjs',
   './vendor/anthropic.mjs', './vendor/qrcode.mjs',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
 ];

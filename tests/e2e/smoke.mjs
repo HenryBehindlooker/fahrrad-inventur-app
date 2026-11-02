@@ -32,6 +32,12 @@ const AI_PART = {
   notes: 'Typischer Mafac-Mittelzug.',
 };
 
+const AI_SALE = {
+  price_private_low: 380, price_private_high: 480, price_dealer: 250, price_parts_out: 320,
+  recommendation: 'komplett verkaufen', reasoning: 'Gesuchter Klassiker mit Simplex-Ausstattung.',
+  title: 'Peugeot PX-10 Rennrad 1975, RH 56', text: 'Klassisches Peugeot PX-10 aus den 70ern.\nGepflegt, fahrbereit.',
+  highlights: ['Reynolds 531'], defects: ['Lackkratzer'], keywords: ['Peugeot', 'Vintage', 'Rennrad'],
+};
 const requests = [];
 const errors = [];
 const browser = await chromium.launch();
@@ -45,9 +51,11 @@ await page.route('https://api.anthropic.com/**', async (route) => {
   if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
   const body = req.postDataJSON();
   requests.push({ headers: await req.allHeaders(), body });
-  const isPart = JSON.stringify(body.messages).includes('EIN einzelnes Fahrradteil');
+  const msg = JSON.stringify(body.messages);
+  const isPart = msg.includes('EIN einzelnes Fahrradteil');
+  const isSale = msg.includes('Verkaufsbewertung');
   const isTest = !body.output_config?.format;
-  const text = isTest ? 'OK' : JSON.stringify(isPart ? AI_PART : AI_BIKE);
+  const text = isTest ? 'OK' : JSON.stringify(isSale ? AI_SALE : isPart ? AI_PART : AI_BIKE);
   await route.fulfill({
     status: 200,
     headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
@@ -186,6 +194,7 @@ try {
     await page.click('dialog button.btn-primary');
     await page.waitForSelector('.toast-success:has-text("3 Teile")');
     await page.goto(`${BASE}#/teile?tab=lager`);
+    await page.waitForSelector('.tabs a.active:has-text("Lager")');
     await page.waitForSelector('.list');
     assert.equal(await page.locator('.list > li').count(), 4);
     await shot('07-lager');
@@ -232,6 +241,128 @@ try {
     await page.fill('input[name=manufacturer]', 'Batavus');
     await page.click('#bike-form button[type=submit]');
     await page.waitForSelector('.detail-head:has-text("R-0003")');
+  });
+
+  await step('Schnellerfassung: KI im Hintergrund, Prüfliste', async () => {
+    await page.goto(`${BASE}#/schnell`);
+    await page.fill('#q-location', 'Halle 2');
+    await pick('#q-gallery', ['web/icons/icon-512.png']);
+    await page.waitForFunction(() => !document.querySelector('#q-save').disabled);
+    await page.click('#q-save');
+    await page.waitForSelector('.toast-success:has-text("R-0004")');
+    await page.goto(`${BASE}#/pruefen`);
+    await page.waitForSelector('.status-review-ready', { timeout: 15000 });
+    assert.match(await page.textContent('.bike-card'), /Peugeot PX-10/);
+    await shot('12-review');
+    await page.click('.bike-card');
+    await page.waitForSelector('.ai-box:has-text("Bitte KI-Ergebnis prüfen")');
+    assert.equal(await page.inputValue('input[name=location]'), 'Halle 2');
+    await page.click('#bike-form button[type=submit]');
+    await page.waitForSelector('.detail-head:has-text("R-0004")');
+    assert.equal(await page.locator('.review-banner').count(), 0);
+    assert.match(await page.textContent('main'), /Teile \(3\)/);
+  });
+
+  await step('Werkstatt: Aufgaben + Kalkulation', async () => {
+    await page.fill('#task-form input[name=text]', 'Kette ersetzen');
+    await page.fill('#task-form input[name=hours]', '1,5');
+    await page.fill('#task-form input[name=partsCost]', '20');
+    await page.click('#task-form button[type=submit]');
+    await page.waitForSelector('.tasks li:has-text("Kette ersetzen")');
+    // Arbeit 1,5 h × 30 € = 45 €, Kosten = 0 + 20 + 45 = 65 €, Schätzwert 450 € => Gewinn 385 €
+    assert.match(await page.textContent('.calc'), /65\s?€[\s\S]*385\s?€/);
+    await page.check('.tasks input[type=checkbox]');
+    await page.waitForSelector('.tasks li.done');
+  });
+
+  await step('Verkaufsassistent: Preise + Anzeige', async () => {
+    await page.click('#btn-sale');
+    await page.waitForSelector('#listing-title:has-text("Peugeot PX-10")');
+    assert.match(await page.textContent('#verkauf'), /380[\s\S]*480/);
+    await page.click('#btn-take-price');
+    await page.waitForSelector('.status-bereit');
+    await shot('13-sale');
+  });
+
+  await step('Aus Lager einbauen + Verlauf', async () => {
+    await page.click('#btn-from-stock');
+    await page.selectOption('#stock-cat', 'bremsen/felgenbremse');
+    await page.locator('#stock-list input[type=radio]').first().check();
+    await page.click('dialog button.btn-primary');
+    await page.waitForSelector('.toast-success:has-text("Teil eingebaut")');
+    await page.waitForSelector('.timeline li:has-text("eingebaut")');
+    assert.match(await page.textContent('.timeline'), /KI-Ergebnis geprüft/);
+    assert.match(await page.textContent('.timeline'), /Erledigt: Kette ersetzen/);
+    await shot('14-werkstatt');
+  });
+
+  await step('Rahmennummer: Duplikat-Warnung', async () => {
+    await page.goto(`${BASE}#/rad/neu?manuell=1`);
+    await page.fill('input[name=manufacturer]', 'Test');
+    await page.fill('input[name=frameNumber]', 'AB 123');
+    await page.click('#bike-form button[type=submit]');
+    await page.waitForSelector('.detail-head');
+    await page.goto(`${BASE}#/rad/neu?manuell=1`);
+    await page.fill('input[name=manufacturer]', 'Test2');
+    await page.fill('input[name=frameNumber]', 'ab123');
+    await page.click('#bike-form button[type=submit]');
+    await page.waitForSelector('dialog h2:has-text("Rahmennummer schon vorhanden")');
+    await page.click('dialog button.btn-primary');
+    await page.waitForSelector('.hint:has-text("Gleiche Rahmennummer")');
+    assert.equal(await page.locator('a[href*="bikeindex.org"]').count(), 1);
+  });
+
+  await step('Etiketten-QR enthält Link, /inv/ öffnet das Rad', async () => {
+    await page.goto(`${BASE}#/druck/etiketten?ids=`);
+    await page.goto(`${BASE}#/druck/etiketten`);
+    await page.waitForSelector('.label svg');
+    const decoded = await page.evaluate(async () => {
+      const { default: jsQR } = await import('./vendor/jsqr.mjs');
+      const svg = document.querySelector('.label svg');
+      const xml = new XMLSerializer().serializeToString(svg);
+      const img = new Image();
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
+      await img.decode();
+      const c = document.createElement('canvas'); c.width = 300; c.height = 300;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 300, 300); ctx.drawImage(img, 20, 20, 260, 260);
+      return jsQR(ctx.getImageData(0, 0, 300, 300).data, 300, 300)?.data;
+    });
+    assert.equal(decoded, `${BASE}#/inv/R-0001`);
+    await page.goto(decoded);
+    await page.waitForSelector('.detail-head:has-text("R-0001")');
+    await page.goto(`${BASE}#/druck/etiketten?teile=`);
+    await page.waitForSelector('.label');
+    assert.ok(await page.locator('.label strong:has-text("T-")').count() >= 3);
+  });
+
+  await step('Inventur: zählen per Handeingabe, fehlende Einträge', async () => {
+    await page.goto(`${BASE}#/inventur`);
+    await page.click('#btn-start');
+    await page.waitForSelector('.scanner');
+    await page.fill('.scanner input[name=manual]', 'R-0002');
+    await page.press('.scanner input[name=manual]', 'Enter');
+    await page.waitForSelector('.scanner-msg.ok:has-text("R-0002")');
+    await page.fill('.scanner input[name=manual]', 'R-0001');
+    await page.press('.scanner input[name=manual]', 'Enter');
+    await page.waitForSelector('.scanner-msg.bad:has-text("Ausgeschlachtet")');
+    await page.fill('.scanner input[name=manual]', 'R-9999');
+    await page.press('.scanner input[name=manual]', 'Enter');
+    await page.waitForSelector('.scanner-msg.bad:has-text("nicht im Bestand")');
+    await page.click('.scanner-close');
+    await page.waitForSelector('h2:has-text("Gefunden (1)")');
+    assert.match(await page.textContent('main'), /Unerwartet gescannt/);
+    await shot('15-inventur');
+    await page.click('#btn-finish');
+    await page.click('dialog button.btn-primary');
+    await page.waitForSelector('h2:has-text("Letzte Inventur")');
+    assert.match(await page.textContent('main'), /fehlten/);
+  });
+
+  await step('Übersicht mit Aktionen und Lagerorten', async () => {
+    await page.goto(BASE);
+    await page.waitForSelector('.actions');
+    assert.match(await page.textContent('main'), /Bestand nach Lagerort/);
+    await shot('16-dashboard');
   });
 
   await step('Dunkelmodus rendert', async () => {

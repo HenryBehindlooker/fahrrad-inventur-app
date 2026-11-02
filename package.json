@@ -8,11 +8,12 @@
     "vendor": "node scripts/build-vendor.mjs",
     "serve": "node scripts/serve.mjs",
     "test": "node --test \"tests/unit/*.test.mjs\"",
-    "test:e2e": "node tests/e2e/smoke.mjs"
+    "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/migration.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
     "esbuild": "^0.28.2",
+    "jsqr": "^1.4.0",
     "qrcode-generator": "^2.0.4"
   }
 }

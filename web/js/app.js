@@ -1,5 +1,5 @@
 // Einstieg: Router, Navigation, Service Worker.
-import { $, toast } from './ui.js';
+import { $, toast, StaleView } from './ui.js';
 import { dashboardView } from './views/dashboard.js';
 import { bikesView } from './views/bikes.js';
 import { bikeDetailView } from './views/bikeDetail.js';
@@ -8,6 +8,9 @@ import { partsView, partGroupView } from './views/parts.js';
 import { partFormView } from './views/partForm.js';
 import { settingsView } from './views/settings.js';
 import { printBikeView, printListView, printLabelsView } from './views/print.js';
+import { inventurView, invRedirectView, scanAndOpen } from './views/scan.js';
+import { quickView, reviewView } from './views/quick.js';
+import { resumeQueue } from './queue.js';
 
 const routes = [
   [/^\/$/, dashboardView, 'home'],
@@ -20,6 +23,10 @@ const routes = [
   [/^\/teil\/neu$/, (p, q) => partFormView(null, q), 'parts'],
   [/^\/teil\/([^/]+)$/, ([id], q) => partFormView(id, q), 'parts'],
   [/^\/einstellungen$/, settingsView, 'settings'],
+  [/^\/inventur$/, inventurView, 'home'],
+  [/^\/schnell$/, quickView, 'new'],
+  [/^\/pruefen$/, reviewView, 'bikes'],
+  [/^\/inv\/([^/]+)$/, invRedirectView, null],
   [/^\/druck\/rad\/([^/]+)$/, ([id]) => printBikeView(id), null],
   [/^\/druck\/liste$/, (p, q) => printListView(q), null],
   [/^\/druck\/etiketten$/, (p, q) => printLabelsView(q), null],
@@ -31,6 +38,7 @@ export function navigate(path, { replace = false } = {}) {
   if (replace) history.replaceState(null, '', target);
   else location.hash = path;
   if (replace) route();
+resumeQueue().catch((e) => console.warn('Warteschlange:', e));
 }
 
 let routing = 0;
@@ -47,7 +55,7 @@ async function route() {
     try {
       await view(m.slice(1), query);
     } catch (e) {
-      if (ticket !== routing) return;
+      if (ticket !== routing || e instanceof StaleView) return;
       console.error(e);
       $('#view').innerHTML = '<div class="empty"><p>Fehler beim Laden der Ansicht.</p></div>';
       toast(e.message || String(e), 'error', 6000);
@@ -58,6 +66,18 @@ async function route() {
 }
 
 window.addEventListener('hashchange', route);
+
+// Hintergrund-Erkennung: betroffene Ansichten aktualisieren
+let refreshTimer;
+window.addEventListener('queue-change', () => {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    const path = (location.hash.slice(1) || '/').split('?')[0];
+    if (['/', '/pruefen', '/raeder'].includes(path) && !document.querySelector('dialog[open], .busy, .scanner')) route();
+  }, 400);
+});
+
+$('#topbar-scan').addEventListener('click', scanAndOpen);
 
 $('#topbar-back').addEventListener('click', (e) => {
   const href = e.currentTarget.dataset.href;

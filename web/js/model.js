@@ -206,8 +206,48 @@ export function partTitle(p) {
   return t || p.description || categoryInfo(p.category).name;
 }
 
+/** Inventarnummer aus Text/QR-Inhalt ziehen ("…#/inv/R-0001", "FIR:T-0012", "r0003"). */
+export function extractInvNr(text) {
+  const m = String(text || '').toUpperCase().match(/(?:^|[^A-Z0-9])([RT])-?(\d{4,})(?![0-9])/);
+  return m ? `${m[1]}-${m[2]}` : null;
+}
+
+export function daysBetween(fromIso, toIso = new Date().toISOString()) {
+  if (!fromIso) return null;
+  return Math.max(0, Math.floor((new Date(toIso) - new Date(fromIso)) / 86_400_000));
+}
+
+const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : 0);
+
+/** Werkstatt-Kalkulation eines Rads: Einkauf + Teile + Arbeitszeit vs. Erlös. */
+export function bikeCalc(bike, laborRate = 0) {
+  const tasks = bike.tasks || [];
+  const hours = tasks.reduce((n, t) => n + num(t.hours), 0);
+  const partsCost = tasks.reduce((n, t) => n + num(t.partsCost), 0);
+  const labor = hours * num(laborRate);
+  const cost = num(bike.purchasePrice) + partsCost + labor;
+  const realized = bike.status === 'verkauft' && bike.salePrice != null;
+  const revenue = realized ? num(bike.salePrice) : (bike.salePrice ?? bike.estimatedValue ?? null);
+  return {
+    hours, partsCost, labor, cost, revenue: revenue === null ? null : num(revenue), realized,
+    margin: revenue === null ? null : num(revenue) - cost,
+    openTasks: tasks.filter((t) => !t.done).length,
+  };
+}
+
+/** Lagerteile, die zu einer Kategorie bzw. Kategorie-Gruppe passen (für "Aus Lager einbauen"). */
+export function stockCandidates(parts, category) {
+  const group = categoryInfo(category).group;
+  return parts
+    .filter((p) => !p.bikeId && p.status === 'lager')
+    .map((p) => ({ p, score: p.category === category ? 2 : categoryInfo(p.category).group === group ? 1 : 0 }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || (a.p.condition || 9) - (b.p.condition || 9))
+    .map((x) => x.p);
+}
+
 /** Statistik für das Dashboard. */
-export function computeStats(bikes, parts) {
+export function computeStats(bikes, parts, laborRate = 0) {
   const count = (arr, fn) => {
     const m = new Map();
     for (const x of arr) { const k = fn(x) || '–'; m.set(k, (m.get(k) || 0) + 1); }
@@ -217,6 +257,8 @@ export function computeStats(bikes, parts) {
   const looseParts = parts.filter((p) => !p.bikeId);
   const stockParts = looseParts.filter((p) => p.status === 'lager');
   const sum = (arr, f) => arr.reduce((n, x) => n + (Number(x[f]) || 0), 0);
+  const sold = bikes.filter((b) => b.status === 'verkauft');
+  const sellDays = sold.map((b) => daysBetween(b.purchaseDate || b.createdAt, b.soldDate || b.updatedAt)).filter((d) => d !== null);
   return {
     bikeCount: bikes.length,
     activeBikeCount: activeBikes.length,
@@ -225,11 +267,17 @@ export function computeStats(bikes, parts) {
     stockPartCount: stockParts.reduce((n, p) => n + (Number(p.quantity) || 1), 0),
     stockValue: sum(activeBikes, 'estimatedValue') + stockParts.reduce((n, p) => n + (Number(p.value) || 0) * (Number(p.quantity) || 1), 0),
     purchaseTotal: sum(bikes, 'purchasePrice'),
-    salesTotal: sum(bikes.filter((b) => b.status === 'verkauft'), 'salePrice'),
+    salesTotal: sum(sold, 'salePrice'),
+    realizedMargin: sold.reduce((n, b) => n + (bikeCalc(b, laborRate).margin || 0), 0),
+    avgDaysToSell: sellDays.length ? Math.round(sellDays.reduce((a, b) => a + b, 0) / sellDays.length) : null,
+    slowMovers: activeBikes.filter((b) => daysBetween(b.purchaseDate || b.createdAt) > 90).length,
+    openTasks: bikes.reduce((n, b) => n + bikeCalc(b).openTasks, 0),
+    toReview: bikes.filter((b) => b.review).length,
     byStatus: count(bikes, (b) => statusName(BIKE_STATUS, b.status)),
     byType: count(bikes, (b) => b.type),
     byManufacturer: count(bikes, (b) => b.manufacturer),
     byPartGroup: count(parts, (p) => categoryInfo(p.category).groupName),
+    byLocation: count([...activeBikes, ...stockParts], (x) => x.location),
     topGroups: groupParts(parts).slice(0, 8),
   };
 }
