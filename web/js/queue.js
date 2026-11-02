@@ -63,6 +63,7 @@ export async function retryFailed() {
 
 /** Nach einem Neustart hängengebliebene Einträge wieder einreihen. */
 export async function resumeQueue() {
+  if (running) return; // läuft bereits – nichts zurücksetzen, sonst doppelte Erkennung
   const bikes = await db.listBikes();
   for (const b of bikes.filter((x) => x.review === 'running')) await db.updateBike({ id: b.id, review: 'queued' });
   runQueue();

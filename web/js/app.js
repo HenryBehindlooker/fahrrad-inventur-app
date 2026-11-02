@@ -38,7 +38,6 @@ export function navigate(path, { replace = false } = {}) {
   if (replace) history.replaceState(null, '', target);
   else location.hash = path;
   if (replace) route();
-resumeQueue().catch((e) => console.warn('Warteschlange:', e));
 }
 
 let routing = 0;
@@ -93,3 +92,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 }
 
 route();
+resumeQueue().catch((e) => console.warn('Warteschlange:', e));
